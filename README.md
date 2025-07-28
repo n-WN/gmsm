@@ -1,58 +1,147 @@
-
 # gmsm
-GM SM2/3/4 library based on Golang
-=======
 
-[![Build Status](https://travis-ci.com/tjfoc/gmsm.svg?branch=master)](https://travis-ci.com/github/tjfoc/gmsm)
+A Go implementation of Chinese National Cryptographic Standards (SM2, SM3, SM4)
 
+[![Build Status](https://dev.azure.com/n-WN/gmsm/_apis/build/status/n-WN.gmsm?branchName=master)](https://dev.azure.com/n-WN/gmsm/_build/latest?definitionId=1&branchName=master)
+[![Go Report Card](https://goreportcard.com/badge/github.com/n-WN/gmsm)](https://goreportcard.com/report/github.com/n-WN/gmsm)
+[![GoDoc](https://godoc.org/github.com/n-WN/gmsm?status.svg)](https://godoc.org/github.com/n-WN/gmsm)
 
-## Feature
- gmsm包含以下主要功能
+## Overview
 
-    SM2: 国密椭圆曲线算法库
-        . 支持Generate Key, Sign, Verify基础操作
-        . 支持加密和不加密的pem文件格式(加密方法参见RFC5958, 具体实现参加代码)
-        . 支持证书的生成，证书的读写(接口兼容rsa和ecdsa的证书)
-        . 支持证书链的操作(接口兼容rsa和ecdsa)
-        . 支持crypto.Signer接口
+This library provides Go implementations of the Chinese National Cryptographic Standards:
+- **SM2**: Elliptic curve digital signature algorithm and public key encryption
+- **SM3**: Cryptographic hash function
+- **SM4**: Block cipher algorithm
 
-    SM3: 国密hash算法库
-       . 支持基础的sm3Sum操作
-       . 支持hash.Hash接口
+The library is designed to be compatible with Go's standard crypto interfaces and follows Go idioms for ease of use.
 
-    SM4: 国密分组密码算法库
-        . 支持Generate Key, Encrypt, Decrypt基础操作
-        . 提供Cipher.Block接口
-        . 支持加密和不加密的pem文件格式(加密方法为pem block加密, 具体函数为x509.EncryptPEMBlock)
+## Features
 
-## [Usage 使用说明](./API使用说明.md)
+### SM2 (Digital Signature and Public Key Encryption)
+- Key generation, signing, and verification
+- PEM file support (encrypted and unencrypted)
+- Certificate generation and parsing (compatible with RSA and ECDSA interfaces)
+- Certificate chain operations
+- Implements `crypto.Signer` interface
 
-## Communication
-tjfoc国密交流 
-   
-[![Join the chat at https://gitter.im/tjfoc/gmsm](https://badges.gitter.im/tjfoc/gmsm.svg)](https://gitter.im/tjfoc/gmsm?utm_source=badge&utm_medium=badge&utm_campaign=-badge&utm_content=badge)
+### SM3 (Hash Function)
+- Basic SM3 sum operations
+- Implements `hash.Hash` interface
 
+### SM4 (Block Cipher)
+- Key generation, encryption, and decryption
+- Implements `cipher.Block` interface
+- PEM file support (encrypted and unencrypted)
 
-- 如果你对国密算法开源技术及应用感兴趣，欢迎添加“苏州同济区块链研究院·小助手“微信，回复“国密算法进群”，加入“同济区块链国密算法交流群”。微信二维码如下:  
-     ![微信二维码](https://github.com/tjfoc/wutongchian-public/blob/master/wutongchain.png)
+## Installation
 
-- 发送邮件到tj@wutongchain.com
- 
- 
- ## License
- 版权所有 苏州同济区块链研究院有限公司(http://www.wutongchain.com/)
- 
- Copyright 2017- Suzhou Tongji Fintech Research Institute. All Rights Reserved.
- Licensed under the Apache License, Version 2.0 (the "License");
- 
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-      http://www.apache.org/licenses/LICENSE-2.0
- Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- 
- See the License for the specific language governing permissions and limitations under the License.
-=======
+```bash
+go get github.com/n-WN/gmsm
+```
 
+## Quick Start
 
+### SM2 Example
 
+```go
+package main
 
+import (
+    "crypto/rand"
+    "fmt"
+    "github.com/tjfoc/gmsm/sm2"
+)
+
+func main() {
+    // Generate key pair
+    priv, err := sm2.GenerateKey(rand.Reader)
+    if err != nil {
+        panic(err)
+    }
+    
+    // Sign message
+    message := []byte("hello world")
+    signature, err := priv.Sign(rand.Reader, message, nil)
+    if err != nil {
+        panic(err)
+    }
+    
+    // Verify signature
+    valid := priv.Public().(*sm2.PublicKey).Verify(message, signature)
+    fmt.Printf("Signature valid: %v\n", valid)
+}
+```
+
+### SM3 Example
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/tjfoc/gmsm/sm3"
+)
+
+func main() {
+    data := []byte("hello world")
+    hash := sm3.Sum(data)
+    fmt.Printf("SM3 hash: %x\n", hash)
+}
+```
+
+### SM4 Example
+
+```go
+package main
+
+import (
+    "crypto/cipher"
+    "crypto/rand"
+    "fmt"
+    "github.com/tjfoc/gmsm/sm4"
+)
+
+func main() {
+    key := []byte("1234567890abcdef") // 16 bytes for SM4
+    block, err := sm4.NewCipher(key)
+    if err != nil {
+        panic(err)
+    }
+    
+    plaintext := []byte("hello world")
+    ciphertext := make([]byte, len(plaintext))
+    
+    // ECB mode (for demonstration - use proper mode in production)
+    block.Encrypt(ciphertext, plaintext)
+    
+    fmt.Printf("Encrypted: %x\n", ciphertext)
+}
+```
+
+## Documentation
+
+For detailed API documentation and usage examples, see the [API documentation](./API使用说明.md) or visit the [GoDoc](https://godoc.org/github.com/n-WN/gmsm).
+
+## Requirements
+
+- Go 1.21 or later
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+Copyright 2017-2024 Suzhou Tongji Fintech Research Institute
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
