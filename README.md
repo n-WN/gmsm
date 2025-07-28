@@ -132,7 +132,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-Copyright 2017-2024 Suzhou Tongji Fintech Research Institute
+Copyright 2017-2025 Suzhou Tongji Fintech Research Institute  
+Copyright 2025 n-WN
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
