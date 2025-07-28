@@ -26,6 +26,7 @@ import (
 	"errors"
 	"io"
 	"math/big"
+	"sync"
 
 	"golang.org/x/crypto/cryptobyte"
 	cbasn1 "golang.org/x/crypto/cryptobyte/asn1"
@@ -259,67 +260,77 @@ func Verify(pub *PublicKey, hash []byte, r, s *big.Int) bool {
  */
 func Encrypt(pub *PublicKey, data []byte, random io.Reader, mode int) ([]byte, error) {
 	length := len(data)
-	for {
-		c := []byte{}
-		curve := pub.Curve
-		k, err := randFieldElement(curve, random)
-		if err != nil {
-			return nil, err
-		}
-		x1, y1 := curve.ScalarBaseMult(k.Bytes())
-		x2, y2 := curve.ScalarMult(pub.X, pub.Y, k.Bytes())
-		x1Buf := x1.Bytes()
-		y1Buf := y1.Bytes()
-		x2Buf := x2.Bytes()
-		y2Buf := y2.Bytes()
-		if n := len(x1Buf); n < 32 {
-			x1Buf = append(zeroByteSlice()[:32-n], x1Buf...)
-		}
-		if n := len(y1Buf); n < 32 {
-			y1Buf = append(zeroByteSlice()[:32-n], y1Buf...)
-		}
-		if n := len(x2Buf); n < 32 {
-			x2Buf = append(zeroByteSlice()[:32-n], x2Buf...)
-		}
-		if n := len(y2Buf); n < 32 {
-			y2Buf = append(zeroByteSlice()[:32-n], y2Buf...)
-		}
-		c = append(c, x1Buf...) // x分量
-		c = append(c, y1Buf...) // y分量
-		tm := []byte{}
-		tm = append(tm, x2Buf...)
-		tm = append(tm, data...)
-		tm = append(tm, y2Buf...)
-		h := sm3.Sm3Sum(tm)
-		c = append(c, h...)
-		ct, ok := kdf(length, x2Buf, y2Buf) // 密文
-		if !ok {
-			continue
-		}
-		c = append(c, ct...)
-		for i := 0; i < length; i++ {
-			c[96+i] ^= data[i]
-		}
-		switch mode {
-
-		case C1C3C2:
-			return append([]byte{0x04}, c...), nil
-		case C1C2C3:
-			c1 := make([]byte, 64)
-			c2 := make([]byte, len(c)-96)
-			c3 := make([]byte, 32)
-			copy(c1, c[:64])   //x1,y1
-			copy(c3, c[64:96]) //hash
-			copy(c2, c[96:])   //密文
-			ciphertext := []byte{}
-			ciphertext = append(ciphertext, c1...)
-			ciphertext = append(ciphertext, c2...)
-			ciphertext = append(ciphertext, c3...)
-			return append([]byte{0x04}, ciphertext...), nil
-		default:
-			return append([]byte{0x04}, c...), nil
-		}
+	curve := pub.Curve
+	k, err := randFieldElement(curve, random)
+	if err != nil {
+		return nil, err
 	}
+	
+	// 预分配缓冲区避免重复分配
+	buf := make([]byte, 96+length)
+	
+	x1, y1 := curve.ScalarBaseMult(k.Bytes())
+	x2, y2 := curve.ScalarMult(pub.X, pub.Y, k.Bytes())
+	
+	// 直接写入固定大小缓冲区
+	putFixedBytes(buf[0:32], x1)
+	putFixedBytes(buf[32:64], y1)
+	putFixedBytes(buf[64:96], x2)
+	
+	// 计算哈希
+	hashInput := make([]byte, 32+length+32)
+	copy(hashInput[0:32], buf[64:96])
+	copy(hashInput[32:32+length], data)
+	putFixedBytes(hashInput[32+length:], y2)
+	hash := sm3.Sm3Sum(hashInput)
+	
+	// 计算密钥
+	key, ok := kdf(length, buf[64:96], y2.Bytes())
+	if !ok {
+		return nil, errors.New("kdf failed")
+	}
+	
+	// 异或加密
+	for i := 0; i < length; i++ {
+		buf[96+i] = data[i] ^ key[i]
+	}
+	
+	// 根据模式调整输出格式
+	switch mode {
+	case C1C3C2:
+		// C1(64) || C3(32) || C2(length)
+		result := make([]byte, 97+length)
+		result[0] = 0x04
+		copy(result[1:65], buf[0:64])
+		copy(result[65:97], hash)
+		copy(result[97:], buf[96:])
+		return result, nil
+	case C1C2C3:
+		// C1(64) || C2(length) || C3(32)
+		result := make([]byte, 97+length)
+		result[0] = 0x04
+		copy(result[1:65], buf[0:64])
+		copy(result[65:65+length], buf[96:])
+		copy(result[65+length:], hash)
+		return result, nil
+	default:
+		result := make([]byte, 97+length)
+		result[0] = 0x04
+		copy(result[1:65], buf[0:64])
+		copy(result[65:97], hash)
+		copy(result[97:], buf[96:])
+		return result, nil
+	}
+}
+
+// putFixedBytes 将big.Int填充为32字节
+func putFixedBytes(dst []byte, x *big.Int) {
+	bytes := x.Bytes()
+	pad := 32 - len(bytes)
+	for i := 0; i < pad; i++ {
+		dst[i] = 0
+	}
+	copy(dst[pad:], bytes)
 }
 
 func Decrypt(priv *PrivateKey, data []byte, mode int) ([]byte, error) {
@@ -575,14 +586,21 @@ func keXHat(x *big.Int) (xul *big.Int) {
 	return r.Add(r, _2w)
 }
 
+var bytesBufferPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
+
 func BytesCombine(pBytes ...[]byte) []byte {
-	len := len(pBytes)
-	s := make([][]byte, len)
-	for index := 0; index < len; index++ {
-		s[index] = pBytes[index]
+	buf := bytesBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bytesBufferPool.Put(buf)
+	
+	for _, p := range pBytes {
+		buf.Write(p)
 	}
-	sep := []byte("")
-	return bytes.Join(s, sep)
+	return buf.Bytes()
 }
 
 func intToBytes(x int) []byte {

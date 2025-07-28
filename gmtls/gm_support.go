@@ -87,17 +87,7 @@ var initonce sync.Once
 func getCAs() []*x509.Certificate {
 	// mod by syl remove pre insert ca certs
 	return nil
-	initonce.Do(func() {
-		for _, pemca := range pemCAs {
-			block, _ := pem.Decode([]byte(pemca.pem))
-			ca, err := x509.ParseCertificate(block.Bytes)
-			if err != nil {
-				panic(err)
-			}
-			certCAs = append(certCAs, ca)
-		}
-	})
-	return certCAs
+	// unreachable code removed - function always returns nil
 }
 
 // A list of cipher suite IDs that are, or have been, implemented by this

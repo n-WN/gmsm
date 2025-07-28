@@ -18,6 +18,7 @@ package sm3
 import (
 	"encoding/binary"
 	"hash"
+	"sync"
 )
 
 type SM3 struct {
@@ -178,12 +179,14 @@ func (sm3 *SM3) update2(msg []byte,) [8]uint32 {
 	return digest
 }
 
-// 创建哈希计算实例
+// New creates a new hash.Hash computing the SM3 checksum.
+// The returned Hash can be used to compute the SM3 digest of data via:
+//
+//  h := sm3.New()
+//  io.Copy(h, data)
+//  sum := h.Sum(nil)
 func New() hash.Hash {
-	var sm3 SM3
-
-	sm3.Reset()
-	return &sm3
+	return &SM3{}
 }
 
 // BlockSize returns the hash's underlying block size.
@@ -199,17 +202,9 @@ func (sm3 *SM3) Size() int { return 32 }
 // This can be skipped for a newly-created hash state; the default zero-allocated state is correct.
 func (sm3 *SM3) Reset() {
 	// Reset digest
-	sm3.digest[0] = 0x7380166f
-	sm3.digest[1] = 0x4914b2b9
-	sm3.digest[2] = 0x172442d7
-	sm3.digest[3] = 0xda8a0600
-	sm3.digest[4] = 0xa96f30bc
-	sm3.digest[5] = 0x163138aa
-	sm3.digest[6] = 0xe38dee4d
-	sm3.digest[7] = 0xb0fb0e4e
-
-	sm3.length = 0 // Reset numberic states
-	sm3.unhandleMsg = []byte{}
+	sm3.digest = [8]uint32{0x7380166f, 0x4914b2b9, 0x172442d7, 0xda8a0600, 0xa96f30bc, 0x163138aa, 0xe38dee4d, 0xb0fb0e4e}
+	sm3.length = 0
+	sm3.unhandleMsg = sm3.unhandleMsg[:0]
 }
 
 // Write (via the embedded io.Writer interface) adds more data to the running hash.
@@ -217,11 +212,12 @@ func (sm3 *SM3) Reset() {
 func (sm3 *SM3) Write(p []byte) (int, error) {
 	toWrite := len(p)
 	sm3.length += uint64(len(p) * 8)
-	msg := append(sm3.unhandleMsg, p...)
-	nblocks := len(msg) / sm3.BlockSize()
-	sm3.update(msg)
-	// Update unhandleMsg
-	sm3.unhandleMsg = msg[nblocks*sm3.BlockSize():]
+	sm3.unhandleMsg = append(sm3.unhandleMsg, p...)
+	
+	for len(sm3.unhandleMsg) >= sm3.BlockSize() {
+		sm3.update(sm3.unhandleMsg[:sm3.BlockSize()])
+		sm3.unhandleMsg = sm3.unhandleMsg[sm3.BlockSize():]
+	}
 
 	return toWrite, nil
 }
@@ -250,10 +246,18 @@ func (sm3 *SM3) Sum(in []byte) []byte {
 
 }
 
-func Sm3Sum(data []byte) []byte {
-	var sm3 SM3
+// sm3Pool 用于重用SM3实例
+var sm3Pool = sync.Pool{
+	New: func() interface{} {
+		return &SM3{}
+	},
+}
 
+func Sm3Sum(data []byte) []byte {
+	sm3 := sm3Pool.Get().(*SM3)
 	sm3.Reset()
+	defer sm3Pool.Put(sm3)
+	
 	_, _ = sm3.Write(data)
 	return sm3.Sum(nil)
 }

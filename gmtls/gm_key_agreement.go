@@ -340,7 +340,7 @@ func (ka *eccKeyAgreementGM) processClientKeyExchange(config *Config, cert *Cert
 		return nil, errClientKeyExchange
 	}
 
-	if int(ckx.ciphertext[0]<<8|ckx.ciphertext[1]) != len(ckx.ciphertext)-2 {
+	if int(uint16(ckx.ciphertext[0])<<8|uint16(ckx.ciphertext[1])) != len(ckx.ciphertext)-2 {
 		return nil, errClientKeyExchange
 	}
 
@@ -372,7 +372,7 @@ func (ka *eccKeyAgreementGM) processServerKeyExchange(config *Config, clientHell
 	if len(skx.key) <= 2 {
 		return errServerKeyExchange
 	}
-	sigLen := int(skx.key[0]<<8 | skx.key[1])
+	sigLen := int(uint16(skx.key[0])<<8 | uint16(skx.key[1]))
 	if sigLen+2 != len(skx.key) {
 		return errServerKeyExchange
 	}

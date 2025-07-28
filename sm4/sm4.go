@@ -182,32 +182,42 @@ func permuteFinalBlock(b []byte, block []uint32) {
 func cryptBlock(subkeys []uint32, b []uint32, r []byte, dst, src []byte, decrypt bool) {
 	permuteInitialBlock(b, src)
 
-	// bounds check elimination in major encryption loop
-	// https://go101.org/article/bounds-check-elimination.html
+	// 预计算S盒查找，减少函数调用开销
+	var sbox [4]uint32
+	var x uint32
+
 	_ = b[3]
 	if decrypt {
 		for i := 0; i < 8; i++ {
-			s := subkeys[31-4*i-3 : 31-4*i-3+4]
-			x := b[1] ^ b[2] ^ b[3] ^ s[3]
-			b[0] = b[0] ^ sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
-			x = b[0] ^ b[2] ^ b[3] ^ s[2]
-			b[1] = b[1] ^ sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
-			x = b[0] ^ b[1] ^ b[3] ^ s[1]
-			b[2] = b[2] ^ sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
-			x = b[1] ^ b[2] ^ b[0] ^ s[0]
-			b[3] = b[3] ^ sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
+			sbox[0] = subkeys[31-4*i-3]
+			sbox[1] = subkeys[31-4*i-2]
+			sbox[2] = subkeys[31-4*i-1]
+			sbox[3] = subkeys[31-4*i]
+			
+			x = b[1] ^ b[2] ^ b[3] ^ sbox[3]
+			b[0] ^= sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
+			x = b[0] ^ b[2] ^ b[3] ^ sbox[2]
+			b[1] ^= sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
+			x = b[0] ^ b[1] ^ b[3] ^ sbox[1]
+			b[2] ^= sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
+			x = b[1] ^ b[2] ^ b[0] ^ sbox[0]
+			b[3] ^= sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
 		}
 	} else {
 		for i := 0; i < 8; i++ {
-			s := subkeys[4*i : 4*i+4]
-			x := b[1] ^ b[2] ^ b[3] ^ s[0]
-			b[0] = b[0] ^ sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
-			x = b[0] ^ b[2] ^ b[3] ^ s[1]
-			b[1] = b[1] ^ sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
-			x = b[0] ^ b[1] ^ b[3] ^ s[2]
-			b[2] = b[2] ^ sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
-			x = b[1] ^ b[2] ^ b[0] ^ s[3]
-			b[3] = b[3] ^ sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
+			sbox[0] = subkeys[4*i]
+			sbox[1] = subkeys[4*i+1]
+			sbox[2] = subkeys[4*i+2]
+			sbox[3] = subkeys[4*i+3]
+			
+			x = b[1] ^ b[2] ^ b[3] ^ sbox[0]
+			b[0] ^= sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
+			x = b[0] ^ b[2] ^ b[3] ^ sbox[1]
+			b[1] ^= sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
+			x = b[0] ^ b[1] ^ b[3] ^ sbox[2]
+			b[2] ^= sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
+			x = b[1] ^ b[2] ^ b[0] ^ sbox[3]
+			b[3] ^= sbox0[x&0xff] ^ sbox1[(x>>8)&0xff] ^ sbox2[(x>>16)&0xff] ^ sbox3[(x>>24)&0xff]
 		}
 	}
 	b[0], b[1], b[2], b[3] = b[3], b[2], b[1], b[0]
